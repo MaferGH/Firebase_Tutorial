@@ -11,40 +11,56 @@ import Combine
 
 class DataManager: ObservableObject {
     @Published var dogs: [Dog] = []
-    
+    private var listener: ListenerRegistration?  
+
     init() {
-        fetchDogs()
+        fetchDogsRealtime()   
     }
-        
-        func fetchDogs() {
-            dogs.removeAll()
-            let db = Firestore.firestore()
-            let ref = db.collection("Dogs")
-            ref.getDocuments { snapshot, error in
-                guard error == nil else {
-                    print(error!.localizedDescription)
-                    return
-                }
-                if let snapshot = snapshot{
-                    for document in snapshot.documents{
-                        let data = document.data()
-                        
-                        let id = data["id"] as? String ?? ""
-                        let breed = data["breed"] as? String ?? ""
-                        
-                        let dog = Dog (id: id, breed: breed)
-                        self.dogs.append(dog)
-                    }
-            }
-        }
-    }
-    func addDog(dogBreed: String){
+    
+
+    func fetchDogsRealtime() {
         let db = Firestore.firestore()
-        let ref = db.collection("Dogs").document(dogBreed)
-        ref.setData(["breed": dogBreed, "id" : 10]) { error in
-            if let error = error {
-                print(error.localizedDescription)
+
+        listener = db.collection("Dogs").addSnapshotListener { snapshot, error in
+            guard let documents = snapshot?.documents else {
+                print("Error al escuchar cambios: \(error?.localizedDescription ?? "error desconocido")")
+                return
+            }
+            
+          
+            self.dogs = documents.compactMap { document in
+                let data = document.data()
+                let breed = data["breed"] as? String ?? ""
+            
+                return Dog(id: document.documentID, breed: breed)
             }
         }
+    }
+    
+    func deleteDog(dog: Dog) {
+        let db = Firestore.firestore()
+        db.collection("Dogs").document(dog.id).delete { error in
+            if let error = error {
+                print("Error al eliminar: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func addDog(dogBreed: String) {
+        let db = Firestore.firestore()
+       
+        let ref = db.collection("Dogs").document()
+        ref.setData([
+            "breed": dogBreed
+         
+        ]) { error in
+            if let error = error {
+                print("Error al guardar: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    deinit {
+        listener?.remove()
     }
 }
